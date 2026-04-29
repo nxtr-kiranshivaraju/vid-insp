@@ -1,0 +1,36 @@
+services:
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - AUTH_TOKEN=${AUTH_TOKEN:-dev-token}
+      - COMPILER_URL=http://compiler-stub:8001
+      - RUNTIME_URL=http://runtime-stub:8002
+      - NEXT_PUBLIC_COMPILER_URL=http://localhost:8001
+      - NEXT_PUBLIC_RUNTIME_URL=http://localhost:8002
+    depends_on:
+      - compiler-stub
+      - runtime-stub
+
+  compiler-stub:
+    build:
+      context: .
+      dockerfile: Dockerfile.stub
+    command: ["npx", "tsx", "stubs/compiler-stub.ts"]
+    environment:
+      - COMPILER_STUB_PORT=8001
+    ports:
+      - "8001:8001"
+
+  runtime-stub:
+    build:
+      context: .
+      dockerfile: Dockerfile.stub
+    command: ["npx", "tsx", "stubs/runtime-stub.ts"]
+    environment:
+      - RUNTIME_STUB_PORT=8002
+    ports:
+      - "8002:8002"
