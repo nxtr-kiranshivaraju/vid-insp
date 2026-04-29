@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: compiler
+      POSTGRES_PASSWORD: compiler
+      POSTGRES_DB: compiler
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compiler -d compiler"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  compiler:
+    build:
+      # Build context is the repo root so the Dockerfile can COPY shared/ + compiler/.
+      context: .
+      dockerfile: compiler/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://compiler:compiler@postgres:5432/compiler
+      SYNC_DATABASE_URL: postgresql://compiler:compiler@postgres:5432/compiler
+      # Model role configuration. The compiler reads these via shared/llm_client.py.
+      # Override these in your .env or docker-compose.override.yml.
+      COMPILER_INTENT_BASE_URL: ${COMPILER_INTENT_BASE_URL:-https://api.anthropic.com/v1}
+      COMPILER_INTENT_API_KEY: ${COMPILER_INTENT_API_KEY:-changeme}
+      COMPILER_INTENT_MODEL: ${COMPILER_INTENT_MODEL:-claude-sonnet-4-6}
+      COMPILER_PROMPTGEN_BASE_URL: ${COMPILER_PROMPTGEN_BASE_URL:-https://api.anthropic.com/v1}
+      COMPILER_PROMPTGEN_API_KEY: ${COMPILER_PROMPTGEN_API_KEY:-changeme}
+      COMPILER_PROMPTGEN_MODEL: ${COMPILER_PROMPTGEN_MODEL:-claude-opus-4-7}
+    ports:
+      - "8001:8001"
+
+volumes:
+  pgdata:
