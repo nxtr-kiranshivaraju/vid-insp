@@ -65,7 +65,9 @@ export default function DeployPage({ params }: { params: { id: string } }) {
     }
   }
 
-  const allPass = preflight?.every((g) => g.status === "pass") ?? false;
+  // `warn` is non-blocking by design — only an explicit `fail` gates Go Live.
+  const canGoLive = preflight ? preflight.every((g) => g.status !== "fail") : false;
+  const hasFail = !!preflight?.some((g) => g.status === "fail");
 
   return (
     <div className="space-y-4">
@@ -156,14 +158,14 @@ export default function DeployPage({ params }: { params: { id: string } }) {
         <CardContent>
           <Button
             onClick={goLive}
-            disabled={!allPass || going}
+            disabled={!canGoLive || going}
             data-testid="go-live"
           >
             {going ? <Spinner /> : "Go live"}
           </Button>
-          {!allPass && preflight && (
+          {hasFail && (
             <p className="mt-2 text-xs text-muted-foreground">
-              All gates must pass before going live.
+              All failing gates must be resolved before going live. Warnings are non-blocking.
             </p>
           )}
         </CardContent>

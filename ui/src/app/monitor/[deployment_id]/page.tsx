@@ -11,17 +11,20 @@ import { CostMeter } from "@/components/monitor/cost-meter";
 import { HealthPanel } from "@/components/monitor/health-panel";
 
 const REFRESH = 5000;
+// Disable focus/reconnect revalidation: with four hooks, tab focus would otherwise fire
+// a 4-request burst on top of the 5s poll.
+const SWR_OPTS = {
+  refreshInterval: REFRESH,
+  revalidateOnFocus: false,
+  revalidateOnReconnect: false,
+};
 
 export default function MonitorPage({ params }: { params: { deployment_id: string } }) {
   const id = params.deployment_id;
-  const status = useSWR(["status", id], () => runtime.status(id), { refreshInterval: REFRESH });
-  const alerts = useSWR(
-    ["alerts", id],
-    () => runtime.alerts(id, { limit: 50 }),
-    { refreshInterval: REFRESH },
-  );
-  const cost = useSWR(["cost", id], () => runtime.cost(id), { refreshInterval: REFRESH });
-  const health = useSWR(["health", id], () => runtime.health(id), { refreshInterval: REFRESH });
+  const status = useSWR(["status", id], () => runtime.status(id), SWR_OPTS);
+  const alerts = useSWR(["alerts", id], () => runtime.alerts(id, { limit: 50 }), SWR_OPTS);
+  const cost = useSWR(["cost", id], () => runtime.cost(id), SWR_OPTS);
+  const health = useSWR(["health", id], () => runtime.health(id), SWR_OPTS);
 
   return (
     <div className="space-y-6">

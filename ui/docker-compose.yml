@@ -9,8 +9,6 @@ services:
       - AUTH_TOKEN=${AUTH_TOKEN:-dev-token}
       - COMPILER_URL=http://compiler-stub:8001
       - RUNTIME_URL=http://runtime-stub:8002
-      - NEXT_PUBLIC_COMPILER_URL=http://localhost:8001
-      - NEXT_PUBLIC_RUNTIME_URL=http://localhost:8002
     depends_on:
       - compiler-stub
       - runtime-stub
