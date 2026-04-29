@@ -42,18 +42,26 @@ async def extract_intents(paragraph: str, client: LLMClient | None = None) -> li
     return parse_intents(raw)
 
 
+_FALLBACK_INTENT_KEYS = ("results", "items", "data")
+
+
 def parse_intents(raw: str) -> list[Intent]:
     """Parse the LLM's JSON response into a list of Intent objects."""
     data = json.loads(raw)
     items: list[dict[str, Any]]
     if isinstance(data, dict):
-        if "intents" in data:
+        if "intents" in data and isinstance(data["intents"], list):
             items = data["intents"]
-        elif isinstance(next(iter(data.values()), None), list):
-            # Tolerate different key names ("results", "items", etc.).
-            items = next(v for v in data.values() if isinstance(v, list))
         else:
-            raise ValueError(f"intent response missing array: {data!r}")
+            # Some models wrap the array under a different but well-known key.
+            # Don't grab any old list — the response may legitimately contain
+            # other arrays (e.g. "errors") that aren't the intent payload.
+            items = next(
+                (data[k] for k in _FALLBACK_INTENT_KEYS if isinstance(data.get(k), list)),
+                None,  # type: ignore[arg-type]
+            )
+            if items is None:
+                raise ValueError(f"intent response missing 'intents' array: {data!r}")
     elif isinstance(data, list):
         items = data
     else:

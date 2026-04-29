@@ -21,6 +21,6 @@ CREATE TABLE IF NOT EXISTS secrets (
     id          TEXT PRIMARY KEY,           -- e.g., cam_loading_bay_rtsp, slack_safety
     customer_id TEXT NOT NULL,
     secret_type TEXT NOT NULL,              -- rtsp_url | webhook_url
-    value       TEXT NOT NULL,              -- encrypted at rest at the application layer
+    value       TEXT NOT NULL,              -- plaintext for now; rely on Postgres-level encryption (TDE / disk) until app-layer encryption lands
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

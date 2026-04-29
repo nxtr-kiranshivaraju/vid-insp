@@ -10,19 +10,19 @@ from pydantic import ValidationError
 from vlm_inspector_shared.dsl.schema import InspectionDSL
 
 
-def _jsonschema_for_dsl() -> dict[str, Any]:
-    """Build the JSON-Schema from Pydantic. Cached at module load."""
-    return InspectionDSL.model_json_schema()
+_DSL_VALIDATOR: Draft202012Validator | None = None
 
 
-_DSL_JSONSCHEMA: dict[str, Any] | None = None
+def _validator() -> Draft202012Validator:
+    """Build (once) and reuse a Draft202012Validator for the DSL schema.
 
-
-def _schema() -> dict[str, Any]:
-    global _DSL_JSONSCHEMA
-    if _DSL_JSONSCHEMA is None:
-        _DSL_JSONSCHEMA = _jsonschema_for_dsl()
-    return _DSL_JSONSCHEMA
+    Compiling the schema is non-trivial; cache the validator instance so we
+    pay that cost once per process instead of on every validate_g1 call.
+    """
+    global _DSL_VALIDATOR
+    if _DSL_VALIDATOR is None:
+        _DSL_VALIDATOR = Draft202012Validator(InspectionDSL.model_json_schema())
+    return _DSL_VALIDATOR
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ def _schema() -> dict[str, Any]:
 
 def validate_g1(dsl: dict[str, Any]) -> list[str]:
     """Structural validation. Returns a list of error messages (empty if valid)."""
-    validator = Draft202012Validator(_schema())
+    validator = _validator()
     errors: list[str] = []
     for err in sorted(validator.iter_errors(dsl), key=lambda e: list(e.absolute_path)):
         path = "/".join(str(p) for p in err.absolute_path) or "<root>"

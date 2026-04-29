@@ -126,5 +126,63 @@ async def test_re_approving_after_modification_re_runs_only_affected(db, patch_s
     assert promptgen_calls(patch_stages) == initial_promptgen_calls  # still no LLM
 
 
+@pytest.mark.asyncio
+async def test_editing_cameras_after_validation_resets_status(db, patch_stages):
+    """If cameras change after a validate, the assembled DSL is stale, so
+    status must drop back to ready_for_config — otherwise it lies about state.
+    """
+    text = (FIXTURES / "warehouse_ppe.txt").read_text().strip()
+    s = await svc.create_session(db, [text])
+    s = await svc.approve_intents(db, s.id)
+    s = await svc.approve_questions(db, s.id)
+    s = await svc.approve_rules(db, s.id)
+    await svc.update_cameras(
+        db,
+        s.id,
+        [{"id": "cam_main", "name": "Bay", "rtsp_secret_ref": "x"}],
+    )
+    await svc.update_channels(db, s.id, [{"id": "default", "type": "log"}])
+    metadata = {"customer_id": "a", "inspection_id": "b", "name": "n"}
+    s, _, errors = await svc.validate_session(db, s.id, metadata, default_channel="default")
+    await db.commit()
+    assert errors == []
+    assert s.status == "validated"
+    assert s.dsl is not None
+
+    s = await svc.update_cameras(
+        db,
+        s.id,
+        [{"id": "cam_other", "name": "Other", "rtsp_secret_ref": "y"}],
+    )
+    await db.commit()
+    assert s.status == "ready_for_config"
+    assert s.dsl is None
+
+
+@pytest.mark.asyncio
+async def test_cannot_edit_cameras_after_commit(db, patch_stages):
+    text = (FIXTURES / "warehouse_ppe.txt").read_text().strip()
+    s = await svc.create_session(db, [text])
+    s = await svc.approve_intents(db, s.id)
+    s = await svc.approve_questions(db, s.id)
+    s = await svc.approve_rules(db, s.id)
+    await svc.update_cameras(
+        db,
+        s.id,
+        [{"id": "cam_main", "name": "Bay", "rtsp_secret_ref": "x"}],
+    )
+    await svc.update_channels(db, s.id, [{"id": "default", "type": "log"}])
+    metadata = {"customer_id": "a", "inspection_id": "b", "name": "n"}
+    await svc.commit_session(db, s.id, metadata, default_channel="default")
+    await db.commit()
+
+    with pytest.raises(svc.SessionError, match="committed"):
+        await svc.update_cameras(
+            db,
+            s.id,
+            [{"id": "cam_other", "name": "Other", "rtsp_secret_ref": "y"}],
+        )
+
+
 def promptgen_calls(patch_stages) -> int:
     return len(patch_stages["promptgen"].calls)

@@ -56,3 +56,13 @@ def test_parse_intents_accepts_keyed_object():
     raw = '{"intents":[{"check_type":"state_check","entity":"x","required":true,"severity":"high"}]}'
     intents = stage_a.parse_intents(raw)
     assert len(intents) == 1
+
+
+def test_parse_intents_rejects_unknown_array_key():
+    """If the response wraps the array under an unrecognized key, fail loudly
+    rather than silently picking an arbitrary list."""
+    import pytest as _pytest
+
+    raw = '{"some_other_key":[{"check_type":"state_check","entity":"x","required":true,"severity":"high"}]}'
+    with _pytest.raises(ValueError, match="missing 'intents' array"):
+        stage_a.parse_intents(raw)

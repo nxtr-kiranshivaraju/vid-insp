@@ -153,9 +153,15 @@ async def update_cameras(
     db: AsyncSession, session_id: UUID, cameras: list[dict[str, Any]]
 ) -> Session:
     s = await get_session(db, session_id)
+    if s.status == "committed":
+        raise SessionError("cannot edit cameras on a committed session")
     [Camera.model_validate(c) for c in cameras]
     s.cameras = cameras
     s.dsl = None
+    # Drop back to ready_for_config so a stale "validated" status doesn't
+    # mask the fact that the assembled DSL needs to be rebuilt.
+    if s.rules_approved:
+        s.status = "ready_for_config"
     await db.flush()
     return s
 
@@ -164,9 +170,13 @@ async def update_channels(
     db: AsyncSession, session_id: UUID, channels: list[dict[str, Any]]
 ) -> Session:
     s = await get_session(db, session_id)
+    if s.status == "committed":
+        raise SessionError("cannot edit channels on a committed session")
     [AlertChannel.model_validate(c) for c in channels]
     s.channels = channels
     s.dsl = None
+    if s.rules_approved:
+        s.status = "ready_for_config"
     await db.flush()
     return s
 

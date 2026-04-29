@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
         task.cancel()
         try:
             await task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+        except asyncio.CancelledError:
             pass
 
 

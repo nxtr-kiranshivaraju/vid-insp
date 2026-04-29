@@ -14,6 +14,12 @@ Endpoints:
     PUT    /sessions/{id}/channels              bind alert channels (ARCH-4)
     POST   /sessions/{id}/validate              dry-run G1 + G2 against assembled DSL
     POST   /sessions/{id}/commit                validate + commit to registry
+
+TODO(auth): These endpoints are currently unauthenticated. The compiler is
+deployed behind a private ingress today, but before any external exposure we
+need (a) per-customer auth (e.g. signed JWT or mTLS) and (b) a customer-id
+guard on every session lookup so a token scoped to customer A cannot read or
+mutate customer B's sessions.
 """
 
 from __future__ import annotations
