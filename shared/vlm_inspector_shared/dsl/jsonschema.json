@@ -1,0 +1,581 @@
+{
+  "$defs": {
+    "Action": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_ref": {
+          "title": "Channel Ref",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "alert",
+            "log",
+            "webhook"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "channel_ref",
+        "message"
+      ],
+      "title": "Action",
+      "type": "object"
+    },
+    "AlertChannel": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "slack",
+            "email",
+            "webhook",
+            "log"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "webhook_secret_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Webhook Secret Ref"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "title": "AlertChannel",
+      "type": "object"
+    },
+    "AlertConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "channels": {
+          "items": {
+            "$ref": "#/$defs/AlertChannel"
+          },
+          "title": "Channels",
+          "type": "array"
+        },
+        "default_channel": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Channel"
+        }
+      },
+      "required": [
+        "channels"
+      ],
+      "title": "AlertConfig",
+      "type": "object"
+    },
+    "Camera": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "rtsp_secret_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rtsp Secret Ref"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Camera",
+      "type": "object"
+    },
+    "Intent": {
+      "additionalProperties": false,
+      "description": "One checkable condition extracted from the user's paragraph.",
+      "properties": {
+        "check_type": {
+          "enum": [
+            "presence_required",
+            "presence_prohibited",
+            "state_check",
+            "count_check",
+            "activity_check"
+          ],
+          "title": "Check Type",
+          "type": "string"
+        },
+        "entity": {
+          "title": "Entity",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "involves_people": {
+          "default": false,
+          "title": "Involves People",
+          "type": "boolean"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "raw_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Text"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "schedule": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schedule"
+        },
+        "severity": {
+          "enum": [
+            "medium",
+            "high",
+            "critical",
+            "safety_critical"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "check_type",
+        "entity",
+        "required",
+        "severity"
+      ],
+      "title": "Intent",
+      "type": "object"
+    },
+    "Metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "customer_id": {
+          "title": "Customer Id",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "inspection_id": {
+          "title": "Inspection Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "customer_id",
+        "inspection_id",
+        "name"
+      ],
+      "title": "Metadata",
+      "type": "object"
+    },
+    "Question": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "intent": {
+          "$ref": "#/$defs/Intent"
+        },
+        "min_confidence": {
+          "default": 0.5,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Min Confidence",
+          "type": "number"
+        },
+        "output_schema": {
+          "$ref": "#/$defs/QuestionOutputSchema"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "type": "string"
+        },
+        "sample_during": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample During"
+        },
+        "sample_every": {
+          "title": "Sample Every",
+          "type": "string"
+        },
+        "target": {
+          "default": "full_frame",
+          "enum": [
+            "full_frame",
+            "cropped_zone",
+            "clip"
+          ],
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "intent",
+        "prompt",
+        "output_schema",
+        "sample_every"
+      ],
+      "title": "Question",
+      "type": "object"
+    },
+    "QuestionOutputSchema": {
+      "additionalProperties": true,
+      "description": "JSON-Schema for the VLM response. Must include `confidence`.",
+      "properties": {
+        "properties": {
+          "additionalProperties": true,
+          "title": "Properties",
+          "type": "object"
+        },
+        "required": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required",
+          "type": "array"
+        },
+        "type": {
+          "const": "object",
+          "default": "object",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "properties",
+        "required"
+      ],
+      "title": "QuestionOutputSchema",
+      "type": "object"
+    },
+    "Rule": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "items": {
+            "$ref": "#/$defs/Action"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "cooldown": {
+          "default": "60s",
+          "title": "Cooldown",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "on": {
+          "$ref": "#/$defs/RuleOn"
+        },
+        "severity": {
+          "enum": [
+            "medium",
+            "high",
+            "critical",
+            "safety_critical"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "sustained_for": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sustained For"
+        },
+        "sustained_threshold": {
+          "default": 0.7,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Sustained Threshold",
+          "type": "number"
+        },
+        "when": {
+          "items": {
+            "$ref": "#/$defs/RuleCondition"
+          },
+          "title": "When",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "on",
+        "when",
+        "severity",
+        "actions"
+      ],
+      "title": "Rule",
+      "type": "object"
+    },
+    "RuleCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "operator": {
+          "enum": [
+            "equals",
+            "not_equals",
+            "greater_than",
+            "less_than",
+            "in",
+            "contains",
+            "exists"
+          ],
+          "title": "Operator",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "field",
+        "operator"
+      ],
+      "title": "RuleCondition",
+      "type": "object"
+    },
+    "RuleOn": {
+      "additionalProperties": false,
+      "properties": {
+        "camera": {
+          "title": "Camera",
+          "type": "string"
+        },
+        "question": {
+          "title": "Question",
+          "type": "string"
+        }
+      },
+      "required": [
+        "camera",
+        "question"
+      ],
+      "title": "RuleOn",
+      "type": "object"
+    },
+    "Schedule": {
+      "additionalProperties": false,
+      "properties": {
+        "cron": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cron"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Schedule",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Versioned, validated inspection definition.",
+  "properties": {
+    "alerts": {
+      "$ref": "#/$defs/AlertConfig"
+    },
+    "cameras": {
+      "items": {
+        "$ref": "#/$defs/Camera"
+      },
+      "title": "Cameras",
+      "type": "array"
+    },
+    "metadata": {
+      "$ref": "#/$defs/Metadata"
+    },
+    "questions": {
+      "items": {
+        "$ref": "#/$defs/Question"
+      },
+      "title": "Questions",
+      "type": "array"
+    },
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/Rule"
+      },
+      "title": "Rules",
+      "type": "array"
+    },
+    "schedules": {
+      "items": {
+        "$ref": "#/$defs/Schedule"
+      },
+      "title": "Schedules",
+      "type": "array"
+    },
+    "version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "metadata",
+    "cameras",
+    "questions",
+    "rules",
+    "alerts"
+  ],
+  "title": "InspectionDSL",
+  "type": "object"
+}

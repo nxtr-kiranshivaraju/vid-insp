@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vlm_inspector_shared"
+version = "0.1.0"
+description = "Shared DSL, validator, prompts, and LLM client for the VLM inspector platform."
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.7,<3",
+    "jsonschema>=4.21",
+    "openai>=1.40",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["vlm_inspector_shared"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
