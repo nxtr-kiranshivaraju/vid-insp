@@ -15,6 +15,7 @@ htmlcov/
 dist/
 build/
 *.log
+*.swp
 .DS_Store
 .idea/
 .vscode/

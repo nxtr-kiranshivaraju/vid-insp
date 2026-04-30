@@ -11,6 +11,8 @@ dependencies = [
     "pydantic>=2.7,<3",
     "jsonschema>=4.21",
     "openai>=1.40",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
@@ -20,8 +22,13 @@ dev = [
     "ruff>=0.4",
 ]
 
+# The compiler imports this code as `vlm_inspector_shared` (its original name)
+# while the runtime imports the same surface as `shared`. Both directories live
+# in this repo and the distribution ships both so neither downstream service has
+# to be retrofitted as part of merging issue #3. A future cleanup should pick one
+# canonical import name and rewrite the other side.
 [tool.hatch.build.targets.wheel]
-packages = ["vlm_inspector_shared"]
+packages = ["vlm_inspector_shared", "shared"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

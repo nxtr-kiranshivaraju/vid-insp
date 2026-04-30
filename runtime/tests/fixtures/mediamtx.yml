@@ -1,0 +1,5 @@
+# Minimal MediaMTX config: serve the bundled fixture MP4 as RTSP at /test.
+paths:
+  test:
+    runOnInit: ffmpeg -re -stream_loop -1 -i /fixtures/test_warehouse.mp4 -c copy -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnInitRestart: yes

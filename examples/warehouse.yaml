@@ -1,0 +1,98 @@
+version: 1
+deployment:
+  id: dep_warehouse_main
+  customer_id: cust_acme
+  inspection_id: insp_warehouse_q2
+
+cameras:
+  - id: cam_loading_bay
+    rtsp_url: rtsp://demo:demo@10.0.0.5:554/stream1
+    sample_every: 5s
+  - id: cam_dock_3
+    rtsp_url: rtsp://demo:demo@10.0.0.6:554/stream1
+    sample_every: 5s
+
+questions:
+  - id: q_hard_hat
+    camera: cam_loading_bay
+    prompt: |
+      Look at the loading bay. Is there any person in the frame who is NOT wearing
+      a hard hat? Reply strictly as JSON matching the schema.
+    output_schema:
+      type: object
+      properties:
+        violation_present:
+          type: boolean
+        violator_description:
+          type: string
+        confidence:
+          type: number
+      required:
+        - violation_present
+        - confidence
+
+  - id: q_dock_obstruction
+    camera: cam_dock_3
+    prompt: |
+      Is dock 3 obstructed by anything that would block a forklift from entering?
+    output_schema:
+      type: object
+      properties:
+        violation_present:
+          type: boolean
+        violator_description:
+          type: string
+        confidence:
+          type: number
+      required:
+        - violation_present
+        - confidence
+
+rules:
+  - id: rule_hard_hat_loading_bay
+    "on":
+      camera: cam_loading_bay
+      question: q_hard_hat
+    when:
+      violation_present: true
+    sustained_for: 30s
+    sustained_threshold: 0.7
+    allow_gaps: false
+    severity: high
+    cooldown: 5m
+    actions:
+      - type: alert
+        channel_ref: slack_safety
+        message: "Hard hat violation detected in Loading Bay"
+        attach: true
+
+  - id: rule_dock_obstructed
+    "on":
+      camera: cam_dock_3
+      question: q_dock_obstruction
+    when:
+      violation_present: true
+    sustained_for: 60s
+    sustained_threshold: 0.7
+    allow_gaps: false
+    severity: critical
+    cooldown: 10m
+    actions:
+      - type: alert
+        channel_ref: slack_safety
+        message: "Dock 3 obstruction detected"
+        attach: true
+      - type: alert
+        channel_ref: pd_ops
+        message: "Dock 3 obstruction"
+
+alerts:
+  channels:
+    - id: slack_safety
+      type: slack_webhook
+      url: https://hooks.slack.com/services/REPLACE/ME
+      cooldown: 5m
+    - id: pd_ops
+      type: pagerduty
+      service_key: REPLACE_ME
+      cooldown: 5m

@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: vlm_runtime
+    ports:
+      - "55432:5432"
+
+  ffmpeg-rtsp:
+    # MediaMTX (formerly rtsp-simple-server) re-streams an MP4 as RTSP.
+    # Mount runtime/tests/fixtures/test_warehouse.mp4 and configure mediamtx
+    # to publish it at rtsp://ffmpeg-rtsp:8554/test.
+    image: bluenviron/mediamtx:latest
+    environment:
+      MTX_RTSPADDRESS: ":8554"
+    ports:
+      - "8554:8554"
+    volumes:
+      - ./tests/fixtures/mediamtx.yml:/mediamtx.yml:ro
+      - ./tests/fixtures:/fixtures:ro
