@@ -38,7 +38,17 @@ class RetentionJob:
         )
         return deleted
 
-    async def run_forever(self) -> None:
+    async def run_forever(self, *, run_immediately: bool = True) -> None:
+        """Run the retention sweep on a schedule.
+
+        Defaults to running once at startup so backlog from a long downtime is cleaned
+        up immediately, not after `interval_s` (24h by default).
+        """
+        if run_immediately:
+            try:
+                await self.run_once()
+            except Exception as e:
+                log.exception("retention_initial_run_failed", extra={"error": str(e)})
         while True:
             try:
                 await asyncio.sleep(self.interval_s)

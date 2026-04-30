@@ -8,21 +8,39 @@ Endpoints (matching the contract in Issue 1):
   GET  /deployments/{id}/observations  (paginated, filterable)
   POST /probe                          (used by the UI to validate camera URLs)
   GET  /healthz                        (liveness)
+
+All routes other than /healthz require `Authorization: Bearer <API_AUTH_TOKEN>`
+when the runtime was started with a non-empty token.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+import logging
+import secrets
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel
 
 from runtime.camera.sampler import probe_rtsp
+from runtime.engine.url_safety import UnsafeUrlError, validate_rtsp_url
+
+log = logging.getLogger(__name__)
 
 
 class ProbeRequest(BaseModel):
     rtsp_url: str
+
+
+def _coerce_aware(dt: datetime | None) -> datetime | None:
+    """FastAPI parses naive ISO strings as naive datetimes — coerce to UTC so
+    comparisons against tz-aware DB timestamps don't blow up."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def build_app(state: dict[str, Any]) -> FastAPI:
@@ -30,6 +48,17 @@ def build_app(state: dict[str, Any]) -> FastAPI:
 
     app = FastAPI(title="vlm-runtime", version="0.1.0")
     router = APIRouter()
+
+    expected_token = (state.get("settings").api_auth_token if state.get("settings") else "") or ""
+
+    async def require_auth(authorization: Optional[str] = Header(default=None)) -> None:
+        if not expected_token:
+            return  # auth disabled by config
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="missing bearer token")
+        provided = authorization.split(" ", 1)[1].strip()
+        if not secrets.compare_digest(provided, expected_token):
+            raise HTTPException(status_code=401, detail="invalid bearer token")
 
     def _require_deployment(deployment_id: str):
         d = state.get("deployment")
@@ -39,11 +68,15 @@ def build_app(state: dict[str, Any]) -> FastAPI:
 
     @app.get("/healthz")
     async def healthz() -> dict[str, Any]:
-        return {"ok": True, "deployment": (state.get("deployment").deployment_id
-                                            if state.get("deployment") else None)}
+        d = state.get("deployment")
+        return {
+            "ok": True,
+            "deployment": d.deployment_id if d else None,
+            "db_available": state.get("db_available", False),
+        }
 
     @router.get("/deployments/{deployment_id}/status")
-    async def status(deployment_id: str) -> dict[str, Any]:
+    async def status(deployment_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
         d = _require_deployment(deployment_id)
         return {
             "deployment_id": d.deployment_id,
@@ -57,12 +90,16 @@ def build_app(state: dict[str, Any]) -> FastAPI:
         }
 
     @router.get("/deployments/{deployment_id}/alerts")
-    async def alerts(deployment_id: str, limit: int = 100) -> dict[str, Any]:
+    async def alerts(
+        deployment_id: str,
+        limit: int = 100,
+        _: None = Depends(require_auth),
+    ) -> dict[str, Any]:
         d = _require_deployment(deployment_id)
         return {"alerts": d.alerts.list_recent(limit=limit)}
 
     @router.get("/deployments/{deployment_id}/cost")
-    async def cost(deployment_id: str) -> dict[str, Any]:
+    async def cost(deployment_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
         d = _require_deployment(deployment_id)
         return {
             "totals": d.cost.totals(),
@@ -70,7 +107,7 @@ def build_app(state: dict[str, Any]) -> FastAPI:
         }
 
     @router.get("/deployments/{deployment_id}/health")
-    async def health(deployment_id: str) -> dict[str, Any]:
+    async def health(deployment_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
         d = _require_deployment(deployment_id)
         return d.health.snapshot(vlm_client=d.vlm)
 
@@ -83,6 +120,7 @@ def build_app(state: dict[str, Any]) -> FastAPI:
         until: Optional[datetime] = None,
         limit: int = Query(default=100, ge=1, le=1000),
         offset: int = Query(default=0, ge=0),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         d = _require_deployment(deployment_id)
         if d.obs_log is None:
@@ -90,15 +128,21 @@ def build_app(state: dict[str, Any]) -> FastAPI:
         rows = await d.obs_log.query(
             camera_id=camera_id,
             question_id=question_id,
-            since=since,
-            until=until,
+            since=_coerce_aware(since),
+            until=_coerce_aware(until),
             limit=limit,
             offset=offset,
         )
         return {"observations": rows}
 
     @app.post("/probe")
-    async def probe(req: ProbeRequest) -> dict[str, Any]:
+    async def probe(req: ProbeRequest, _: None = Depends(require_auth)) -> dict[str, Any]:
+        # Reject anything that isn't an rtsp/rtsps URL — without this OpenCV will
+        # cheerfully open file://, http://, etc., which is a SSRF / local-file primitive.
+        try:
+            validate_rtsp_url(req.rtsp_url)
+        except UnsafeUrlError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         ok, detail = await probe_rtsp(req.rtsp_url)
         return {"ok": ok, **detail}
 

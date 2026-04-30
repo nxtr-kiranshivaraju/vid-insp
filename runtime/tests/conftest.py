@@ -107,10 +107,10 @@ class StubVLM:
     })
     raise_n: int = 0  # how many calls should raise before returning
     coercion_errors: list[str] = field(default_factory=list)
-    last_usage: dict[str, int] | None = field(default_factory=lambda: {
+    canned_usage: dict[str, int] | None = field(default_factory=lambda: {
         "prompt_tokens": 1000, "completion_tokens": 50, "total_tokens": 1050
     })
-    last_provider: str = "primary"
+    canned_provider: str = "primary"
     coercion_error_counts: dict[tuple[str, str], int] = field(default_factory=lambda: defaultdict(int))
     call_counts: dict[tuple[str, str], int] = field(default_factory=lambda: defaultdict(int))
     calls: int = 0
@@ -118,16 +118,18 @@ class StubVLM:
     async def ask(self, prompt: str, jpeg_bytes: bytes, output_schema: dict, *, question_id: str = "unknown"):
         from runtime.vlm.coercion import CoercedResponse
         self.calls += 1
-        self.call_counts[(question_id, self.last_provider)] += 1
+        self.call_counts[(question_id, self.canned_provider)] += 1
         if self.raise_n > 0:
             self.raise_n -= 1
             raise RuntimeError("stub: synthetic VLM failure")
         if self.coercion_errors:
-            self.coercion_error_counts[(question_id, self.last_provider)] += 1
+            self.coercion_error_counts[(question_id, self.canned_provider)] += 1
         return CoercedResponse(
             data=dict(self.canned_answer),
             coercion_errors=list(self.coercion_errors),
             raw=self.canned_answer,
+            usage=dict(self.canned_usage) if self.canned_usage else None,
+            provider=self.canned_provider,
         )
 
     async def test_call(self, jpeg_bytes: bytes) -> bool:

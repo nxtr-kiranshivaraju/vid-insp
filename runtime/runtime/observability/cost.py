@@ -73,27 +73,41 @@ class CostMeter:
         return {"usd_last_hour": round(hour, 6), "usd_last_day": round(day, 6)}
 
     async def persist_pending(self) -> int:
-        """Flush the pending hour-bucket aggregates to Postgres. Returns rows written."""
+        """Flush pending hour-bucket aggregates to Postgres. Returns rows written.
+
+        On insert failure we fold the unwritten rows back into `pending` so the
+        next flush picks them up. The "swap then write" pattern means concurrent
+        `record()` calls land in a fresh dict, not the one we're draining.
+        """
         if self.pool is None or not self.pending:
             return 0
-        rows = list(self.pending.items())
+        rows = self.pending
         self.pending = {}
-        for (camera_id, question_id, hour), (calls, cost) in rows:
-            await self.pool.execute(
-                "INSERT INTO cost_snapshots "
-                "(deployment_id, camera_id, question_id, hour, call_count, cost_usd) "
-                "VALUES ($1, $2, $3, $4, $5, $6) "
-                "ON CONFLICT (deployment_id, camera_id, question_id, hour) DO UPDATE "
-                "SET call_count = cost_snapshots.call_count + EXCLUDED.call_count, "
-                "    cost_usd  = cost_snapshots.cost_usd  + EXCLUDED.cost_usd",
-                self.deployment_id,
-                camera_id,
-                question_id,
-                hour,
-                calls,
-                cost,
-            )
-        return len(rows)
+        written = 0
+        for (camera_id, question_id, hour), (calls, cost) in list(rows.items()):
+            try:
+                await self.pool.execute(
+                    "INSERT INTO cost_snapshots "
+                    "(deployment_id, camera_id, question_id, hour, call_count, cost_usd) "
+                    "VALUES ($1, $2, $3, $4, $5, $6) "
+                    "ON CONFLICT (deployment_id, camera_id, question_id, hour) DO UPDATE "
+                    "SET call_count = cost_snapshots.call_count + EXCLUDED.call_count, "
+                    "    cost_usd  = cost_snapshots.cost_usd  + EXCLUDED.cost_usd",
+                    self.deployment_id,
+                    camera_id,
+                    question_id,
+                    hour,
+                    calls,
+                    cost,
+                )
+                written += 1
+            except Exception as e:
+                # Re-fold the unwritten row plus everything after it.
+                log.warning("cost_persist_row_failed", extra={"error": str(e)})
+                key = (camera_id, question_id, hour)
+                prev_calls, prev_cost = self.pending.get(key, (0, 0.0))
+                self.pending[key] = (prev_calls + calls, prev_cost + cost)
+        return written
 
     async def run_persist_loop(self, interval_s: float = 300.0) -> None:
         while True:

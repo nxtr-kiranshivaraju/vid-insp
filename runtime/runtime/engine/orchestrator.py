@@ -58,16 +58,28 @@ class Deployment:
     _stopping: bool = False
 
     async def stop(self) -> None:
+        if self._stopping:
+            return
         self._stopping = True
         for t in self.tasks:
             t.cancel()
-        for t in self.tasks:
-            try:
-                await t
-            except (asyncio.CancelledError, Exception):
-                pass
+        # Use gather(return_exceptions=True) so a hanging task can't block shutdown
+        # and so cancellation/error reporting stays observable per-task.
+        results = await asyncio.gather(*self.tasks, return_exceptions=True)
+        for t, res in zip(self.tasks, results):
+            if isinstance(res, asyncio.CancelledError):
+                continue
+            if isinstance(res, Exception):
+                log.warning(
+                    "task_exit_error", extra={"task": t.get_name(), "error": str(res)}
+                )
         for s in self.samplers.values():
-            await s.close()
+            try:
+                await s.close()
+            except Exception as e:
+                log.warning(
+                    "sampler_close_error", extra={"camera": s.camera_id, "error": str(e)}
+                )
         if self.dispatcher is not None:
             await self.dispatcher.aclose()
 
@@ -93,7 +105,11 @@ def build_deployment(
         pool=pool,
     )
     alerts_hist = AlertHistory(pool=pool, deployment_id=deployment_id)
-    dispatcher = AlertDispatcher(channels=dsl.alerts.channels, history_sink=alerts_hist.record)
+    dispatcher = AlertDispatcher(
+        channels=dsl.alerts.channels,
+        history_sink=alerts_hist.record,
+        allow_private_webhooks=getattr(settings, "allow_private_webhooks", False),
+    )
     rule_evaluator = RuleEvaluator()
     cadence = AdaptiveCadence()
     encoder = FrameEncoder(
@@ -102,31 +118,14 @@ def build_deployment(
     obs_log = ObservationLog(pool=pool, deployment_id=deployment_id) if pool is not None else None
 
     async def emit_starved(camera_id: str) -> None:
-        # Synthesize a "rule-like" alert for observation-starved cameras.
-        from runtime.engine.dispatcher import DispatchedAlert
-        from runtime.engine.rules import RuleResult
-
-        synthetic_payload = DispatchedAlert(
+        # Synthetic alert for observation-starved cameras. dispatch_synthetic
+        # handles channel fan-out + history recording in one place.
+        await dispatcher.dispatch_synthetic(
             rule_id=f"observation_starved:{camera_id}",
             camera_id=camera_id,
+            message=f"Camera {camera_id} has produced no observations recently",
             severity="high",
-            payload={
-                "rule_id": f"observation_starved:{camera_id}",
-                "severity": "high",
-                "camera_id": camera_id,
-                "timestamp": utcnow().isoformat(),
-                "message": f"Camera {camera_id} has produced no observations recently",
-            },
-            dispatched_at=utcnow(),
         )
-        await alerts_hist.record(synthetic_payload)
-        # Also fire on every configured channel — best-effort.
-        for ch in dsl.alerts.channels:
-            try:
-                ok, detail = await dispatcher._send(ch, synthetic_payload.payload)
-                synthetic_payload.channel_results[ch.id] = {"ok": ok, **detail}
-            except Exception as e:
-                synthetic_payload.channel_results[ch.id] = {"ok": False, "error": str(e)}
 
     failure_handler = CameraFailureHandler(
         starved_threshold=settings.camera_starved_threshold,
@@ -278,8 +277,8 @@ async def per_question_task(
                     )
                     answer = coerced.data
                     confidence = float(answer.get("confidence", 0.0) or 0.0)
-                    if cost is not None:
-                        cost.record(camera.id, question.id, vlm.last_usage)
+                    if cost is not None and coerced.usage is not None:
+                        cost.record(camera.id, question.id, coerced.usage)
                     cache.update(frame, answer)
                     obs = Observation(timestamp=utcnow(), answer=answer, confidence=confidence)
                 except Exception as e:
@@ -304,14 +303,21 @@ async def per_question_task(
                 except Exception as e:
                     log.exception("obs_log_failed", extra={"error": str(e)})
 
-            # Evaluate rules for this (camera, question)
+            # Evaluate rules. Encode the snapshot at most once per tick, only if a
+            # rule actually fires AND wants `attach=true` (no rules → no encode).
+            attach_jpeg: bytes | None = None
             for rule in rules_for_q:
                 result = rule_evaluator.evaluate(rule, buf)
-                if result is not None and result.matched:
-                    try:
-                        await dispatcher.dispatch(result, rule, obs, frame_jpeg=encoder.encode(frame))
-                    except Exception as e:
-                        log.exception("dispatch_failed", extra={"rule": rule.id, "error": str(e)})
+                if result is None or not result.matched:
+                    continue
+                if attach_jpeg is None and any(
+                    a.type == "alert" and a.attach for a in rule.actions
+                ):
+                    attach_jpeg = encoder.encode(frame)
+                try:
+                    await dispatcher.dispatch(result, rule, obs, frame_jpeg=attach_jpeg)
+                except Exception as e:
+                    log.exception("dispatch_failed", extra={"rule": rule.id, "error": str(e)})
 
             # Adaptive cadence
             recent = [o.answer for o in list(buf.buffer)[-cadence.stable_window :]]

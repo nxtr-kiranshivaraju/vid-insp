@@ -14,7 +14,7 @@ import os
 from collections import defaultdict
 from typing import Any
 
-from shared.llm_client import LLMClient, ProviderError, RateLimitError
+from shared.llm_client import LLMClient, LLMResponse, ProviderError, RateLimitError
 
 from runtime.vlm.coercion import CoercedResponse, coerce_and_validate
 
@@ -36,9 +36,6 @@ class VLMClient:
         # Per (question_id, provider) coercion-error counts for /health.
         self.coercion_error_counts: dict[tuple[str, str], int] = defaultdict(int)
         self.call_counts: dict[tuple[str, str], int] = defaultdict(int)
-        # Last token usage from the most recent call — read by the cost meter.
-        self.last_usage: dict[str, int] | None = None
-        self.last_provider: str | None = None
 
     @classmethod
     def from_env(cls, semaphore: asyncio.Semaphore | None = None) -> "VLMClient":
@@ -91,11 +88,12 @@ class VLMClient:
                     messages=messages, response_format=response_format
                 )
 
-        self.last_usage = raw.usage
-        self.last_provider = provider
         self.call_counts[(question_id, provider)] += 1
         content = raw.choices[0].message_content
         coerced = coerce_and_validate(content, output_schema)
+        coerced.usage = raw.usage
+        coerced.provider = provider
+        coerced.model = raw.model
         if coerced.coercion_errors:
             self.coercion_error_counts[(question_id, provider)] += 1
         return coerced

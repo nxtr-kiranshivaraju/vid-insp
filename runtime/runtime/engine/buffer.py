@@ -36,8 +36,20 @@ class TemporalBuffer:
         return self.buffer[-1] if self.buffer else None
 
     def window_observations(self, window: timedelta) -> list[Observation]:
+        """Return observations from the last `window` ago to now.
+
+        Observations are appended in time order, so we can scan from the right
+        edge and stop at the first item older than the cutoff instead of doing
+        an O(n) full sweep.
+        """
         cutoff = utcnow() - window
-        return [o for o in self.buffer if o.timestamp >= cutoff]
+        out: list[Observation] = []
+        for o in reversed(self.buffer):
+            if o.timestamp < cutoff:
+                break
+            out.append(o)
+        out.reverse()
+        return out
 
     def clear(self) -> None:
         self.buffer.clear()

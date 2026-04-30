@@ -55,9 +55,18 @@ class Settings:
         default_factory=lambda: _env_int("OBSERVATION_RETENTION_DAYS", 90)
     )
 
-    # API
-    api_host: str = field(default_factory=lambda: _env_str("API_HOST", "0.0.0.0"))
+    # API. Bind to localhost by default — the runtime is meant to sit behind a
+    # reverse proxy in production. Set API_HOST=0.0.0.0 explicitly to expose it.
+    api_host: str = field(default_factory=lambda: _env_str("API_HOST", "127.0.0.1"))
     api_port: int = field(default_factory=lambda: _env_int("API_PORT", 8080))
+    # Bearer token required on every API request. If empty the API is unauthenticated
+    # — we still log a warning at boot so the operator notices.
+    api_auth_token: str = field(default_factory=lambda: _env_str("API_AUTH_TOKEN", ""))
+    # Allow webhook URLs that resolve to private/loopback addresses. Off by default;
+    # turn on for development against a local mock server.
+    allow_private_webhooks: bool = field(
+        default_factory=lambda: bool(int(_env_str("ALLOW_PRIVATE_WEBHOOKS", "0") or "0"))
+    )
 
     # Cost (USD per million tokens — defaults are advisory, override per-deployment)
     vlm_cost_per_mtok_input: float = field(

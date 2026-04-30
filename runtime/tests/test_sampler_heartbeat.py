@@ -62,7 +62,7 @@ class FakeCv2:
 async def test_open_then_heartbeat_ok():
     handler = CameraFailureHandler(starved_threshold=99)
     fake = FakeCv2([FakeCapture(ok_grabs=10)])
-    sampler = FrameSampler("rtsp://x", "cam_a", handler, cv2_module=fake)
+    sampler = FrameSampler("rtsp://x", "cam_a", handler, cv2_module=fake, skip_tcp_probe=True)
     await sampler.open()
     assert await sampler.heartbeat() is True
 
@@ -76,7 +76,7 @@ async def test_heartbeat_failure_triggers_reconnect_and_reset():
         FakeCapture(ok_grabs=0, ok_reads=0),  # initial: opens but every grab fails
         FakeCapture(ok_grabs=5),              # reconnect target
     ])
-    sampler = FrameSampler("rtsp://x", "cam_a", handler, cv2_module=fake)
+    sampler = FrameSampler("rtsp://x", "cam_a", handler, cv2_module=fake, skip_tcp_probe=True)
     await sampler.open()
 
     # First heartbeat: fails, triggers reconnect to second FakeCapture, on_reconnect fires.

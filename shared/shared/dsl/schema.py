@@ -19,19 +19,19 @@ Severity = Literal["medium", "high", "critical", "safety_critical"]
 ChannelType = Literal["slack_webhook", "pagerduty", "webhook"]
 
 
-_DURATION_RE = re.compile(r"^\s*(\d+)\s*(ms|s|m|h)\s*$")
+_DURATION_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h)\s*$")
 
 
 def parse_duration(value: str) -> timedelta:
-    """Parse a duration string like '30s', '5m', '1h' into a timedelta."""
+    """Parse a duration string like '30s', '5m', '1h', '1.5s' into a timedelta."""
     if isinstance(value, timedelta):
         return value
     if not isinstance(value, str):
         raise ValueError(f"duration must be a string, got {type(value).__name__}")
     m = _DURATION_RE.match(value)
     if not m:
-        raise ValueError(f"invalid duration: {value!r} (expected e.g. '30s', '5m')")
-    n, unit = int(m.group(1)), m.group(2)
+        raise ValueError(f"invalid duration: {value!r} (expected e.g. '30s', '5m', '1.5s')")
+    n, unit = float(m.group(1)), m.group(2)
     return {
         "ms": timedelta(milliseconds=n),
         "s": timedelta(seconds=n),

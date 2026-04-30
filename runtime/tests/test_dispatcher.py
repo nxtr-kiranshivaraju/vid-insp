@@ -57,7 +57,7 @@ async def test_slack_dispatch_invokes_http(_frozen_time):
     transport = httpx.MockTransport(handler)
     http = httpx.AsyncClient(transport=transport)
 
-    d = AlertDispatcher(channels=_channels(), http_client=http)
+    d = AlertDispatcher(channels=_channels(), http_client=http, allow_private_webhooks=True)
     obs = Observation(timestamp=_frozen_time.now, answer={
         "violator_description": "person without hard hat", "violation_present": True,
     }, confidence=0.9)
@@ -79,7 +79,7 @@ async def test_pagerduty_payload_shape(_frozen_time):
         return httpx.Response(202, json={"status": "success"})
 
     http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    d = AlertDispatcher(channels=_channels(), http_client=http)
+    d = AlertDispatcher(channels=_channels(), http_client=http, allow_private_webhooks=True)
     obs = Observation(timestamp=_frozen_time.now, answer={"violation_present": True}, confidence=0.9)
     result = RuleResult(rule_id="r1", matched=True, vote_ratio=0.9, sample_count=6, gap_count=0)
     await d.dispatch(result, _rule(channel_ref="pd"), obs, frame_jpeg=None)
@@ -92,7 +92,7 @@ async def test_pagerduty_payload_shape(_frozen_time):
 
 async def test_unknown_channel_logs_and_continues(_frozen_time):
     http = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200)))
-    d = AlertDispatcher(channels=_channels(), http_client=http)
+    d = AlertDispatcher(channels=_channels(), http_client=http, allow_private_webhooks=True)
     rule = _rule(channel_ref="missing")
     obs = Observation(timestamp=_frozen_time.now, answer={"violation_present": True}, confidence=0.9)
     result = RuleResult(rule_id="r1", matched=True, vote_ratio=0.9, sample_count=6, gap_count=0)
@@ -109,7 +109,7 @@ async def test_violator_description_carried_in_payload(_frozen_time):
         return httpx.Response(200)
 
     http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    d = AlertDispatcher(channels=_channels(), http_client=http)
+    d = AlertDispatcher(channels=_channels(), http_client=http, allow_private_webhooks=True)
     obs = Observation(
         timestamp=_frozen_time.now,
         answer={"violator_description": "person in red jacket near forklift", "violation_present": True},

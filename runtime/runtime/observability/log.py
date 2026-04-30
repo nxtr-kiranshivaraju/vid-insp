@@ -30,6 +30,9 @@ class ObservationLog:
         self.deployment_id = deployment_id
 
     async def record(self, camera_id: str, question_id: str, obs: Observation) -> None:
+        # Pass the dict straight through. The asyncpg pool registers a JSONB codec
+        # at acquire-time (db.pool.create_pool), so the bind is encoded once.
+        # Pre-`json.dumps()`-ing here would produce a JSON-encoded string-of-JSON.
         await self.pool.execute(
             "INSERT INTO observations "
             "(deployment_id, camera_id, question_id, timestamp, answer, confidence, is_gap) "
@@ -38,7 +41,7 @@ class ObservationLog:
             camera_id,
             question_id,
             obs.timestamp,
-            json.dumps(obs.answer) if obs.answer is not None else None,
+            obs.answer,
             float(obs.confidence),
             bool(obs.is_gap),
         )

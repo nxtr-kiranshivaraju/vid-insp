@@ -111,10 +111,11 @@ class LLMClient:
         try:
             raw = await client.chat.completions.create(**kwargs)
         except Exception as e:  # normalise
-            etype = type(e).__name__
-            if "RateLimit" in etype or "429" in str(e):
+            # Prefer the openai SDK's own typed exceptions when available, since
+            # name-string matching breaks the moment a provider subclasses oddly.
+            if _is_openai_rate_limit(e) or _looks_like_429(e):
                 raise RateLimitError(str(e)) from e
-            raise ProviderError(f"{etype}: {e}") from e
+            raise ProviderError(f"{type(e).__name__}: {e}") from e
         # Normalise the response so callers don't depend on openai's object shape.
         choices = [
             LLMResponseChoice(message_content=(c.message.content or ""))
@@ -134,3 +135,20 @@ class LLMClient:
             usage=usage,
             model=getattr(raw, "model", self.model),
         )
+
+
+def _is_openai_rate_limit(e: BaseException) -> bool:
+    """True if `e` is openai.RateLimitError without forcing the import on tests
+    that don't have the openai package available."""
+    try:
+        from openai import RateLimitError as OpenAIRateLimit  # type: ignore
+    except Exception:
+        return False
+    return isinstance(e, OpenAIRateLimit)
+
+
+def _looks_like_429(e: BaseException) -> bool:
+    status = getattr(e, "status_code", None)
+    if status == 429:
+        return True
+    return "429" in str(e)

@@ -62,7 +62,12 @@ def client(stub_vlm, fake_pool, _frozen_time):
         "dispatched_at": _frozen_time.now.isoformat(),
         "channel_results": {}, "payload": {"message": "hi"},
     })
-    app = build_app({"deployment": deployment, "boot_report": {"aborted": False}})
+    app = build_app({
+        "deployment": deployment,
+        "boot_report": {"aborted": False},
+        "settings": settings,
+        "db_available": True,
+    })
     return TestClient(app)
 
 

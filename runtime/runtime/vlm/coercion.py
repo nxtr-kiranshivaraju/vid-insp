@@ -27,6 +27,11 @@ class CoercedResponse:
     data: dict[str, Any]
     coercion_errors: list[str] = field(default_factory=list)
     raw: Any = None
+    # Per-call provider metadata. Returned through the response (instead of being
+    # stashed on the client) so concurrent calls don't race over shared state.
+    usage: dict[str, int] | None = None
+    provider: str | None = None
+    model: str | None = None
 
 
 _DEFAULTS: dict[str, Any] = {
@@ -69,7 +74,9 @@ def _coerce_bool(value: Any) -> tuple[bool | None, bool]:
 
 def _coerce_number(value: Any, integer: bool) -> tuple[Any, bool]:
     if isinstance(value, bool):
-        return None, False  # bools are ints in Python — explicit reject
+        # Coerce explicitly so True→1, False→0 instead of silently defaulting to 0.
+        n = 1 if value else 0
+        return (n, True) if integer else (float(n), True)
     if isinstance(value, (int, float)):
         return (int(value), True) if integer else (float(value), True)
     if isinstance(value, str):

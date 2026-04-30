@@ -8,17 +8,22 @@ Sliding-window math (ARCH-1): with VLM accuracy 0.85 and a 30s window at 5s samp
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from shared.dsl import Rule
 from shared.dsl.schema import parse_duration
 
 from runtime.clock import utcnow
-from runtime.engine.buffer import Observation, TemporalBuffer
+from runtime.engine.buffer import TemporalBuffer
 
 log = logging.getLogger(__name__)
+
+# Operators we know about. Anything else is a config error and we surface it
+# instead of silently failing the match.
+_KNOWN_OPS = ("$gte", "$lte", "$gt", "$lt", "$eq", "$ne")
 
 
 @dataclass
@@ -31,8 +36,10 @@ class RuleResult:
 
 
 class RuleEvaluator:
-    def __init__(self):
-        # rule_id -> last-fired timestamp (for cooldown)
+    """Per-instance state. Tests and callers should construct one per deployment
+    so no state leaks across tests via a class-level attribute."""
+
+    def __init__(self) -> None:
         self._last_fired: dict[str, datetime] = {}
 
     def evaluate(self, rule: Rule, buffer: TemporalBuffer) -> RuleResult | None:
@@ -53,16 +60,18 @@ class RuleEvaluator:
             return None
 
         matches = sum(1 for o in real_obs if self._conditions_match(rule.when, o.answer))
-        ratio = matches / len(real_obs)
-
-        if ratio >= rule.sustained_threshold:
+        # Compare integer counts, not floats. With 10 samples and threshold 0.7
+        # the user expects "7 or more matches"; floating ratio comparison can
+        # off-by-one on edge cases (e.g. 0.7 * 10 == 7.000000000000001).
+        min_matches = max(1, math.ceil(rule.sustained_threshold * len(real_obs)))
+        if matches >= min_matches:
             if self._cooldown_active(rule):
                 return None
             self._set_cooldown(rule)
             return RuleResult(
                 rule_id=rule.id,
                 matched=True,
-                vote_ratio=ratio,
+                vote_ratio=matches / len(real_obs),
                 sample_count=len(real_obs),
                 gap_count=gap_count,
             )
@@ -93,9 +102,14 @@ class RuleEvaluator:
             return False
         for key, expected in when.items():
             actual = answer.get(key)
-            # Allow both equality and {"$gte": x} / {"$lte": x} / {"$gt": x} / {"$lt": x}
             if isinstance(expected, dict):
                 for op, threshold in expected.items():
+                    if op not in _KNOWN_OPS:
+                        # Don't silently fail-closed — surface the typo.
+                        raise ValueError(
+                            f"unknown rule operator {op!r} in when[{key!r}]; "
+                            f"supported: {_KNOWN_OPS}"
+                        )
                     if op == "$gte" and not (actual is not None and actual >= threshold):
                         return False
                     if op == "$lte" and not (actual is not None and actual <= threshold):

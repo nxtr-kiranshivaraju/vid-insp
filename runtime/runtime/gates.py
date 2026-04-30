@@ -167,14 +167,16 @@ async def gate_g7_dry_run(dsl: DSL, vlm_client) -> GateResult:
 
 # ---------- helpers -----------------------------------------------------------
 
+
 def _tiny_jpeg() -> bytes:
-    """A 1x1 white JPEG, hard-coded so G3 doesn't depend on opencv import order."""
-    # Smallest valid JPEG (1x1 white) — produced once and inlined.
-    return bytes.fromhex(
-        "ffd8ffe000104a46494600010100000100010000ffdb004300080606070605"
-        "08070707090908"
-        # short-form: just include a real minimal JPEG via numpy + cv2 fallback if available
-    ) or b""
+    """A 1x1 white JPEG generated via OpenCV. Used by G3."""
+    import cv2
+
+    arr = np.full((1, 1, 3), 255, dtype=np.uint8)
+    ok, buf = cv2.imencode(".jpg", arr)
+    if not ok:
+        raise RuntimeError("failed to build tiny JPEG")
+    return buf.tobytes()
 
 
 def _question_to_json_schema(q) -> dict[str, Any]:
@@ -189,14 +191,3 @@ def _question_to_json_schema(q) -> dict[str, Any]:
         },
         "strict": False,
     }
-
-
-# Replace the inlined hex with a proper opencv-based 1x1 jpeg generator.
-def _tiny_jpeg() -> bytes:  # noqa: F811
-    import cv2
-
-    arr = np.full((1, 1, 3), 255, dtype=np.uint8)
-    ok, buf = cv2.imencode(".jpg", arr)
-    if not ok:
-        raise RuntimeError("failed to build tiny JPEG")
-    return buf.tobytes()

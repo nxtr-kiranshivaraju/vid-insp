@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from collections import deque
-from datetime import datetime
 from typing import Any
 
 from runtime.engine.dispatcher import DispatchedAlert
@@ -32,6 +30,9 @@ class AlertHistory:
         if self.pool is None:
             return
         try:
+            # Pass payload as a dict — the pool registers a JSONB codec at acquire-time
+            # so asyncpg encodes it once. Pre-`json.dumps()`-ing here would store
+            # a JSON-quoted string, breaking downstream readers.
             await self.pool.execute(
                 "INSERT INTO alert_history "
                 "(deployment_id, rule_id, camera_id, severity, message, "
@@ -44,7 +45,7 @@ class AlertHistory:
                 str(alert.payload.get("message", "")),
                 str(alert.payload.get("violator_description", "")),
                 float(alert.payload.get("vote_ratio", 0.0)),
-                json.dumps(alert.payload),
+                alert.payload,
                 alert.dispatched_at,
             )
         except Exception as e:

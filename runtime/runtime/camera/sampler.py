@@ -28,6 +28,7 @@ class FrameSampler:
         failure_handler,
         heartbeat_interval: float = 30.0,
         cv2_module: Any = cv2,
+        skip_tcp_probe: bool = False,
     ):
         self.rtsp_url = rtsp_url
         self.camera_id = camera_id
@@ -36,14 +37,24 @@ class FrameSampler:
         self.failure_handler = failure_handler
         self.heartbeat_interval = heartbeat_interval
         self._cv2 = cv2_module
+        self._skip_tcp_probe = skip_tcp_probe
         self._lock = asyncio.Lock()
 
     async def open(self) -> None:
-        """Open the RTSP connection. Called at boot; reopened on heartbeat failure."""
+        """Open the RTSP connection. Called at boot; reopened on heartbeat failure.
+
+        Performs a fast TCP pre-probe so an unreachable host fails in milliseconds
+        instead of blocking forever inside OpenCV's RTSP timeout (which can't be
+        cancelled from the asyncio side).
+        """
+        if not self._skip_tcp_probe:
+            reachable, detail = await _tcp_reachable(self.rtsp_url, timeout=3.0)
+            if not reachable:
+                raise RTSPOpenFailed(self.camera_id, f"tcp pre-probe failed: {detail}")
         cap = await asyncio.to_thread(self._cv2.VideoCapture, self.rtsp_url)
         if not cap.isOpened():
             await asyncio.to_thread(cap.release)
-            raise RTSPOpenFailed(self.camera_id, f"VideoCapture.isOpened() returned False")
+            raise RTSPOpenFailed(self.camera_id, "VideoCapture.isOpened() returned False")
         self.cap = cap
         self.last_heartbeat_ok = utcnow()
         log.info("rtsp_opened", extra={"camera_id": self.camera_id})
