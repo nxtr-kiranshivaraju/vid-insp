@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: vlm_runtime
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  runtime:
+    build:
+      context: ..
+      dockerfile: runtime/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vlm_runtime
+      RUNTIME_VLM_PRIMARY_BASE_URL: ${RUNTIME_VLM_PRIMARY_BASE_URL}
+      RUNTIME_VLM_PRIMARY_API_KEY: ${RUNTIME_VLM_PRIMARY_API_KEY}
+      RUNTIME_VLM_PRIMARY_MODEL: ${RUNTIME_VLM_PRIMARY_MODEL}
+      RUNTIME_VLM_FALLBACK_BASE_URL: ${RUNTIME_VLM_FALLBACK_BASE_URL:-}
+      RUNTIME_VLM_FALLBACK_API_KEY: ${RUNTIME_VLM_FALLBACK_API_KEY:-}
+      RUNTIME_VLM_FALLBACK_MODEL: ${RUNTIME_VLM_FALLBACK_MODEL:-}
+      VLM_CONCURRENCY: "10"
+      JPEG_QUALITY: "85"
+      IMAGE_MAX_DIMENSION: "1024"
+      OBSERVATION_RETENTION_DAYS: "90"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../examples:/app/dsl:ro
+
+volumes:
+  pg_data:
